@@ -1,32 +1,34 @@
-// We require the Hardhat Runtime Environment explicitly here. This is optional
-// but useful for running the script in a standalone fashion through `node <script>`.
-//
-// You can also run a script with `npx hardhat run <script>`. If you do that, Hardhat
-// will compile your contracts, add the Hardhat Runtime Environment's members to the
-// global scope, and execute the script.
-const hre = require("hardhat");
+const { ethers } = require("hardhat");
 
 async function main() {
-  const currentTimestampInSeconds = Math.round(Date.now() / 1000);
-  const unlockTime = currentTimestampInSeconds + 60;
+  // Quiz deployment
+  const Quiz = await ethers.getContractFactory("Quiz");
+  const quiz = await Quiz.deploy();
+  await quiz.waitForDeployment();
+  console.log(`Quiz deployed to ${quiz.target}`);
 
-  const lockedAmount = hre.ethers.parseEther("0.001");
+  // Factory deployment
+  const factory = await ethers.deployContract("Factory");
+  await factory.waitForDeployment();
+  console.log(`Factory deployed to ${factory.target}`);
 
-  const lock = await hre.ethers.deployContract("Lock", [unlockTime], {
-    value: lockedAmount,
-  });
+  // Proxy deployment
+  const txResponse = await factory.deploy(await quiz.getAddress());
+  const txReceipt = await txResponse.wait();
+  console.log(txReceipt.logs[0].args[0]);
+  const proxyAddr = txReceipt.logs[0].args[0];
+  const proxy = Quiz.attach(proxyAddr);
 
-  await lock.waitForDeployment();
+  // Proxy interaction
+  const answer = await proxy.getHash("answer");
+  const tx = await proxy.initialize(answer);
+  await tx.wait();
 
-  console.log(
-    `Lock with ${ethers.formatEther(
-      lockedAmount
-    )}ETH and unlock timestamp ${unlockTime} deployed to ${lock.target}`
-  );
+  // Logging the answers - original quiz does not have, proxy has
+  console.log(await proxy.answer());
+  console.log(await quiz.answer());
 }
 
-// We recommend this pattern to be able to use async/await everywhere
-// and properly handle errors.
 main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
