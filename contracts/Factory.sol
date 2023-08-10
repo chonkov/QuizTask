@@ -2,12 +2,10 @@
 pragma solidity ^0.8.17;
 
 contract Factory {
-    /*
-    
-    The question can be passed as a string and the answer as bytes32 as args and a delegate call
-    can be made to `result` after the contract has been created in order to set up all vars
+    event Deployment(address indexed);
 
-    */
+    address[] proxies;
+
     function deploy(address target) external returns (address result) {
         bytes20 targetBytes = bytes20(target);
 
@@ -27,11 +25,17 @@ contract Factory {
             )
             // create a contract with bytes stored in memory and upoc successful creation return the address
             result := create(0, freeMemPtr, 0x37)
-
-            // if result
-            // {
-            //     delegatecall()
-            // }
         }
+
+        proxies.push(result);
+        emit Deployment(result);
+    }
+
+    function getProxies() external view returns (address[] memory) {
+        return proxies;
+    }
+
+    function getProxy(uint i) external view returns (address) {
+        return proxies[i];
     }
 }
