@@ -1,8 +1,6 @@
 const {
-  time,
   loadFixture,
 } = require("@nomicfoundation/hardhat-toolbox/network-helpers");
-const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
@@ -11,7 +9,6 @@ describe("Quiz", function () {
     const QUESTION = "Can you guess the secret string?";
 
     const quiz = await ethers.deployContract("Quiz");
-    // const quiz = await Quiz.deploy();
     await quiz.waitForDeployment();
 
     const answer = await quiz.getHash("answer");
@@ -32,9 +29,7 @@ describe("Quiz", function () {
       const { quiz } = await loadFixture(deployQuiz);
       const answer = await quiz.answer();
 
-      expect(answer).to.be.equal(
-        "0x0000000000000000000000000000000000000000000000000000000000000000"
-      );
+      expect(answer).to.be.equal(ethers.zeroPadBytes("0x00", 32));
     });
 
     it("Should set the answer correctly", async function () {
@@ -63,14 +58,28 @@ describe("Quiz", function () {
   });
 
   describe("Guessing", function () {
-    it("Wrong guess - no winner && funds stay within the contract", async function () {
+    beforeEach(async function () {
       const { quiz, answer } = await loadFixture(deployQuiz);
       const [owner, other] = await ethers.getSigners();
 
       const value = ethers.parseEther("1");
-      const answer2 = "answer2";
+      const guess2 = "answer2";
 
       let tx = await quiz.initialize(answer, {
+        value: value,
+      });
+      await tx.wait();
+    });
+
+    async function initQuiz() {
+      const { quiz, answer } = await loadFixture(deployQuiz);
+      const [owner, ...other] = await ethers.getSigners();
+
+      const value = ethers.parseEther("1");
+      const guess = "answer";
+      const guess2 = "answer2";
+
+      const tx = await quiz.initialize(answer, {
         value: value,
       });
       await tx.wait();
@@ -78,13 +87,42 @@ describe("Quiz", function () {
       expect(await quiz.answer()).to.be.equal(answer);
       expect(await quiz.getPrizePool()).to.be.equal(value);
 
-      tx = await quiz.guess(answer2);
+      return { quiz, owner, other, answer, guess, guess2, value };
+    }
+
+    it("Wrong guess - no winner && funds stay within the contract", async function () {
+      const { quiz, other, guess2, value } = await loadFixture(initQuiz);
+      const tx = await quiz.connect(other[0]).guess(guess2);
       await tx.wait();
 
-      expect(await quiz.winner()).to.be.equal(
-        "0x0000000000000000000000000000000000000000"
-      );
+      expect(await quiz.winner()).to.be.equal(ethers.ZeroAddress);
       expect(await quiz.getPrizePool()).to.be.equal(value);
+    });
+
+    it("Correct guess - winner is saved and funds are transferred", async function () {
+      const { quiz, other, guess, value } = await loadFixture(initQuiz);
+
+      expect(await quiz.connect(other[0]).guess(guess)).to.changeEtherBalances(
+        [other[0], quiz],
+        [value, -value]
+      );
+
+      expect(await quiz.winner()).to.be.equal(other[0].address);
+      expect(await quiz.getPrizePool()).to.be.equal(0);
+    });
+
+    it("Correct guess - but a winner is already picked", async function () {
+      const { quiz, owner, other, guess, value } = await loadFixture(initQuiz);
+      const tx = await quiz.connect(other[0]).guess(guess);
+      await tx.wait();
+
+      await expect(
+        quiz.connect(other[1]).guess(guess)
+      ).to.be.revertedWithCustomError(quiz, `Quiz__WinnerExists`);
+
+      await expect(
+        owner.sendTransaction({ to: quiz, value: value })
+      ).to.be.revertedWithCustomError(quiz, `Quiz__WinnerExists`);
     });
   });
 });
