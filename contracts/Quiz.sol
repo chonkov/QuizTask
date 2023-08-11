@@ -13,6 +13,7 @@ contract Quiz {
     event AnswerGuessed(address indexed, string indexed);
 
     bytes32 internal constant QUESTION = "Can you guess the secret string?";
+    bytes32 internal constant SALT = "Random salt prepended to the msg";
     bytes32 public answer;
     address public winner;
 
@@ -32,13 +33,17 @@ contract Quiz {
         if (answer != bytes32(0)) {
             revert Quiz__SecondInitialization();
         }
-        answer = _answer;
+        answer = keccak256(abi.encode(SALT, _answer));
 
         emit Initialized(address(this), _answer);
     }
 
     function getHash(string memory str) external pure returns (bytes32) {
         return keccak256(abi.encode(str));
+    }
+
+    function getHashWithSalt(bytes32 _answer) external pure returns (bytes32) {
+        return keccak256(abi.encode(SALT, _answer));
     }
 
     function getQuestion() external pure returns (string memory) {
@@ -52,7 +57,9 @@ contract Quiz {
     function guess(
         string memory _guess
     ) external noWinnerExists returns (bool) {
-        bytes32 hash = keccak256(abi.encode(_guess));
+        bytes32 hash = keccak256(
+            abi.encode(SALT, keccak256(abi.encode(_guess)))
+        );
         if (hash == answer) {
             winner = msg.sender;
             payable(winner).transfer(address(this).balance);
