@@ -12,8 +12,9 @@ describe("Factory", function () {
     await quiz.waitForDeployment();
 
     const answer = await quiz.getHash("answer");
+    const finalAnswer = await quiz.getHashWithSalt(answer);
 
-    return { quiz, QUESTION, answer };
+    return { quiz, QUESTION, answer, finalAnswer };
   }
 
   async function deployFactory() {
@@ -37,12 +38,6 @@ describe("Factory", function () {
 
       await expect(factory.deploy(quiz.target)).to.not.be.reverted;
     });
-
-    //     const txResponse = await factory.deploy(await quiz.getAddress());
-    //   const txReceipt = await txResponse.wait();
-    //   console.log(txReceipt.logs[0].args[0]);
-    //   const proxyAddr = txReceipt.logs[0].args[0];
-    //   const proxy = Quiz.attach(proxyAddr);
 
     it("Should emit an event", async function () {
       const { quiz } = await loadFixture(deployQuiz);

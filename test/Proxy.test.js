@@ -7,13 +7,15 @@ const { ethers } = require("hardhat");
 describe("Proxy", function () {
   async function deployQuiz() {
     const QUESTION = "Can you guess the secret string?";
+    const SALT = "Random salt prepended to the msg";
 
     const quiz = await ethers.deployContract("Quiz");
     await quiz.waitForDeployment();
 
     const answer = await quiz.getHash("answer");
+    const finalAnswer = await quiz.getHashWithSalt(answer);
 
-    return { quiz, QUESTION, answer };
+    return { quiz, QUESTION, SALT, answer, finalAnswer };
   }
 
   async function deployFactory() {
@@ -62,7 +64,7 @@ describe("Proxy", function () {
     });
 
     it("Should initialize proxy correctly", async function () {
-      const { answer } = await loadFixture(deployQuiz);
+      const { answer, finalAnswer } = await loadFixture(deployQuiz);
       const { proxy } = await loadFixture(deployProxy);
 
       const value = ethers.parseEther("1.0");
@@ -72,27 +74,25 @@ describe("Proxy", function () {
       });
       await tx.wait();
 
-      expect(await proxy.answer()).to.be.equal(answer);
+      expect(await proxy.answer()).to.be.equal(finalAnswer);
       expect(await proxy.getPrizePool()).to.be.equal(value);
     });
 
     it("Should transfer funds if answered is guessed", async function () {
-      const { answer } = await loadFixture(deployQuiz);
+      const { answer, finalAnswer } = await loadFixture(deployQuiz);
       const { proxy } = await loadFixture(deployProxy);
 
       const [owner, ...other] = await ethers.getSigners();
       const value = ethers.parseEther("1.0");
-      const guess = "answer";
 
       const tx = await proxy.initialize(answer, {
         value: value,
       });
       await tx.wait();
 
-      expect(await proxy.connect(other[0]).guess(guess)).to.changeEtherBalances(
-        [other[0], proxy],
-        [value, -value]
-      );
+      expect(
+        await proxy.connect(other[0]).guess("answer")
+      ).to.changeEtherBalances([other[0], proxy], [value, -value]);
 
       expect(await proxy.winner()).to.be.equal(other[0].address);
     });

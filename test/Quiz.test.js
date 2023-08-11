@@ -7,13 +7,15 @@ const { ethers } = require("hardhat");
 describe("Quiz", function () {
   async function deployQuiz() {
     const QUESTION = "Can you guess the secret string?";
+    const SALT = "Random salt prepended to the msg";
 
     const quiz = await ethers.deployContract("Quiz");
     await quiz.waitForDeployment();
 
     const answer = await quiz.getHash("answer");
+    const finalAnswer = await quiz.getHashWithSalt(answer);
 
-    return { quiz, QUESTION, answer };
+    return { quiz, QUESTION, SALT, answer, finalAnswer };
   }
 
   describe("Deployment", function () {
@@ -44,20 +46,21 @@ describe("Quiz", function () {
     });
 
     it("Should set the answer correctly", async function () {
-      const { quiz, answer } = await loadFixture(deployQuiz);
+      const { quiz, answer, finalAnswer } = await loadFixture(deployQuiz);
 
       const tx = await quiz.initialize(answer);
       await tx.wait();
 
-      expect(await quiz.answer()).to.be.equal(answer);
+      expect(await quiz.answer()).to.be.equal(finalAnswer);
     });
 
     it("Should fail if somebody tries to change the answer", async function () {
-      const { quiz, answer } = await loadFixture(deployQuiz);
+      const { quiz, answer, finalAnswer } = await loadFixture(deployQuiz);
 
       const tx = await quiz.initialize(answer);
+      await tx.wait();
 
-      expect(await quiz.answer()).to.be.equal(answer);
+      expect(await quiz.answer()).to.be.equal(finalAnswer);
 
       const answer2 = await quiz.getHash("answer2");
 
@@ -78,7 +81,7 @@ describe("Quiz", function () {
 
   describe("Guessing", function () {
     async function initQuiz() {
-      const { quiz, answer } = await loadFixture(deployQuiz);
+      const { quiz, answer, finalAnswer } = await loadFixture(deployQuiz);
       const [owner, ...other] = await ethers.getSigners();
 
       const value = ethers.parseEther("1");
@@ -90,7 +93,7 @@ describe("Quiz", function () {
       });
       await tx.wait();
 
-      expect(await quiz.answer()).to.be.equal(answer);
+      expect(await quiz.answer()).to.be.equal(finalAnswer);
       expect(await quiz.getPrizePool()).to.be.equal(value);
 
       return { quiz, owner, other, answer, guess, guess2, value };
