@@ -24,6 +24,17 @@ describe("Quiz", function () {
     });
   });
 
+  describe("Receiving funds", function () {
+    it("Should accept funds through receive function", async function () {
+      const { quiz } = await loadFixture(deployQuiz);
+
+      const [owner] = await ethers.getSigners();
+      const amount = ethers.parseEther("1");
+      await expect(owner.sendTransaction({ to: quiz, value: amount })).to.not.be
+        .reverted;
+    });
+  });
+
   describe("Initialization", function () {
     it("Should have an empty answer", async function () {
       const { quiz } = await loadFixture(deployQuiz);
@@ -55,22 +66,17 @@ describe("Quiz", function () {
         `Quiz__SecondInitialization`
       );
     });
+
+    it("Should emit an event", async function () {
+      const { quiz, answer } = await loadFixture(deployQuiz);
+
+      expect(await quiz.initialize(answer))
+        .to.emit(quiz, "Initialized")
+        .withArgs(quiz.target, answer);
+    });
   });
 
   describe("Guessing", function () {
-    beforeEach(async function () {
-      const { quiz, answer } = await loadFixture(deployQuiz);
-      const [owner, other] = await ethers.getSigners();
-
-      const value = ethers.parseEther("1");
-      const guess2 = "answer2";
-
-      let tx = await quiz.initialize(answer, {
-        value: value,
-      });
-      await tx.wait();
-    });
-
     async function initQuiz() {
       const { quiz, answer } = await loadFixture(deployQuiz);
       const [owner, ...other] = await ethers.getSigners();
@@ -99,16 +105,30 @@ describe("Quiz", function () {
       expect(await quiz.getPrizePool()).to.be.equal(value);
     });
 
-    it("Correct guess - winner is saved and funds are transferred", async function () {
+    it("Correct guess - winner is saved", async function () {
+      const { quiz, other, guess } = await loadFixture(initQuiz);
+      const tx = await quiz.connect(other[0]).guess(guess);
+      await tx.wait();
+
+      expect(await quiz.winner()).to.be.equal(other[0].address);
+    });
+
+    it("Correct guess - funds are transferred", async function () {
       const { quiz, other, guess, value } = await loadFixture(initQuiz);
 
       expect(await quiz.connect(other[0]).guess(guess)).to.changeEtherBalances(
         [other[0], quiz],
         [value, -value]
       );
-
-      expect(await quiz.winner()).to.be.equal(other[0].address);
       expect(await quiz.getPrizePool()).to.be.equal(0);
+    });
+
+    it("Correct guess - an event is emitted", async function () {
+      const { quiz, other, guess, value } = await loadFixture(initQuiz);
+
+      expect(await quiz.connect(other[0]).guess(guess))
+        .to.emit(quiz, "AnswerGuessed")
+        .withArgs(other[0].address, guess);
     });
 
     it("Correct guess - but a winner is already picked", async function () {
@@ -119,6 +139,12 @@ describe("Quiz", function () {
       await expect(
         quiz.connect(other[1]).guess(guess)
       ).to.be.revertedWithCustomError(quiz, `Quiz__WinnerExists`);
+    });
+
+    it("Send funds - but a winner is already picked", async function () {
+      const { quiz, owner, other, guess, value } = await loadFixture(initQuiz);
+      const tx = await quiz.connect(other[0]).guess(guess);
+      await tx.wait();
 
       await expect(
         owner.sendTransaction({ to: quiz, value: value })

@@ -9,6 +9,9 @@ error Quiz__SecondInitialization();
 error Quiz__WinnerExists();
 
 contract Quiz {
+    event Initialized(address indexed, bytes32 indexed);
+    event AnswerGuessed(address indexed, string indexed);
+
     bytes32 internal constant QUESTION = "Can you guess the secret string?";
     bytes32 public answer;
     address public winner;
@@ -26,13 +29,12 @@ contract Quiz {
 
     // Make sure initialize can be called only once
     function initialize(bytes32 _answer) external payable {
-        if (
-            answer !=
-            0x0000000000000000000000000000000000000000000000000000000000000000
-        ) {
+        if (answer != bytes32(0)) {
             revert Quiz__SecondInitialization();
         }
         answer = _answer;
+
+        emit Initialized(address(this), _answer);
     }
 
     function getHash(string memory str) external pure returns (bytes32) {
@@ -54,6 +56,7 @@ contract Quiz {
         if (hash == answer) {
             winner = msg.sender;
             payable(winner).transfer(address(this).balance);
+            emit AnswerGuessed(msg.sender, _guess);
             return true;
         }
         return false;
